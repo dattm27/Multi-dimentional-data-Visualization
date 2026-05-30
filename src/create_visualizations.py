@@ -67,7 +67,32 @@ def plot_weather_heatmap(df: pd.DataFrame, outdir: str) -> str:
     # 5. Set title "Average monthly temperature by city", xlabel "Month", and ylabel "City".
     # 6. Save the figure as "weather_heatmap.png" in outdir (using 300 dpi and tight layout) and return the saved file path.
 
-    raise NotImplementedError("plot_weather_heatmap is not implemented yet.")
+    # 1. Average monthly temperature for each city.
+    monthly = df.groupby(["city", "month"])["avg_temp"].mean().reset_index()
+    # 2-3. Pivot to city x month matrix with months in calendar order.
+    matrix = monthly.pivot(index="city", columns="month", values="avg_temp")
+    matrix = matrix.reindex(columns=sorted(matrix.columns))
+
+    # 4. Draw the heatmap.
+    plt.figure(figsize=(10, 4))
+    sns.heatmap(
+        matrix,
+        cmap="coolwarm",
+        annot=True,
+        fmt=".1f",
+        cbar_kws={"label": "Average temperature"},
+    )
+    # 5. Labels and title.
+    plt.title("Average monthly temperature by city")
+    plt.xlabel("Month")
+    plt.ylabel("City")
+
+    # 6. Save and return.
+    out_path = os.path.join(outdir, "weather_heatmap.png")
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=300)
+    plt.close()
+    return out_path
 
 
 def plot_weather_scatter(df: pd.DataFrame, outdir: str) -> str:
@@ -116,7 +141,75 @@ def plot_weather_scatter(df: pd.DataFrame, outdir: str) -> str:
     # 7. Add title "Daily weather: temperature vs humidity with precipitation (size)".
     # 8. Save the figure as "weather_scatter.png" in outdir (using 300 dpi and tight layout) and return the saved file path.
 
-    raise NotImplementedError("plot_weather_scatter is not implemented yet.")
+    from matplotlib.lines import Line2D
+
+    # 1. Clean the precipitation column (trace values "T" etc. become 0).
+    df = df.copy()
+    df["precip"] = pd.to_numeric(df["precip"], errors="coerce").fillna(0.0)
+
+    # 2-3. Figure and marker size range.
+    plt.figure(figsize=(9, 6))
+    size_range = (20, 300)
+
+    # 4. Scatter plot; hide default legend to build custom ones.
+    ax = sns.scatterplot(
+        data=df,
+        x="avg_humidity",
+        y="avg_temp",
+        hue="city",
+        size="precip",
+        sizes=size_range,
+        alpha=0.65,
+        legend=False,
+    )
+    ax.set_xlabel("Average relative humidity (%)")
+    ax.set_ylabel("Average temperature (°F)")
+
+    # 5. Custom legend for cities (hue).
+    cities = sorted(df["city"].unique())
+    palette = sns.color_palette(n_colors=len(cities))
+    city_handles = [
+        Line2D(
+            [0], [0],
+            marker="o", linestyle="",
+            markerfacecolor=palette[i], markeredgecolor=palette[i],
+            markersize=8, label=city,
+        )
+        for i, city in enumerate(cities)
+    ]
+    city_legend = ax.legend(
+        handles=city_handles,
+        title="City",
+        loc="upper left",
+        bbox_to_anchor=(1.02, 1.0),
+    )
+    ax.add_artist(city_legend)
+
+    # 6. Custom legend for precipitation sizes (size).
+    pmax = df["precip"].max()
+    precip_values = np.linspace(0, pmax, 4)
+    precip_handles = []
+    for val in precip_values:
+        marker_size = np.interp(val, [0, pmax], list(size_range))
+        h = plt.scatter([], [], s=marker_size, color="gray", alpha=0.65,
+                        label=f"{val:.2f}")
+        precip_handles.append(h)
+    ax.legend(
+        handles=precip_handles,
+        title="Precipitation",
+        loc="lower left",
+        bbox_to_anchor=(1.02, 0.0),
+    )
+
+    # 7. Title.
+    plt.title("Daily weather: temperature vs humidity with precipitation (size)")
+
+    # 8. Save and return.
+    out_path = os.path.join(outdir, "weather_scatter.png")
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=300)
+    plt.close()
+    return out_path
 
 
 def plot_global_temp_heatmap(df: pd.DataFrame, outdir: str) -> str:
@@ -156,7 +249,51 @@ def plot_global_temp_heatmap(df: pd.DataFrame, outdir: str) -> str:
     # 8. Set title "Global land–ocean temperature anomalies (1880–2025)", xlabel "Month", and ylabel "Year".
     # 9. Save the figure as "global_temp_heatmap.png" in outdir (using 300 dpi and tight layout) and return the saved file path.
 
-    raise NotImplementedError("plot_global_temp_heatmap is not implemented yet.")
+    months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    month_to_num = {m: i + 1 for i, m in enumerate(months)}
+
+    # 1. Reshape wide -> long.
+    long_df = df.melt(
+        id_vars="Year",
+        value_vars=months,
+        var_name="Month",
+        value_name="Anomaly",
+    )
+    # 2. Map month abbreviations to numbers.
+    long_df["MonthNum"] = long_df["Month"].map(month_to_num)
+
+    # 3-4. Pivot back to Year x MonthNum matrix, sorted by year.
+    matrix = long_df.pivot(index="Year", columns="MonthNum", values="Anomaly")
+    matrix = matrix.sort_index()
+
+    # 5-6. Figure and heatmap.
+    plt.figure(figsize=(10, 8))
+    ax = sns.heatmap(
+        matrix,
+        cmap="coolwarm",
+        vmin=-1.5,
+        vmax=1.5,
+        cbar_kws={"label": "Temperature anomaly (°C relative to 1951–1980)"},
+        linewidths=0,
+        linecolor="white",
+    )
+
+    # 7. Month abbreviations on x-axis.
+    ax.set_xticks(np.arange(len(months)) + 0.5)
+    ax.set_xticklabels(months, rotation=45)
+
+    # 8. Title and labels.
+    plt.title("Global land–ocean temperature anomalies (1880–2025)")
+    plt.xlabel("Month")
+    plt.ylabel("Year")
+
+    # 9. Save and return.
+    out_path = os.path.join(outdir, "global_temp_heatmap.png")
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=300)
+    plt.close()
+    return out_path
 
 
 def plot_minnesota_precip_line(df: pd.DataFrame, outdir: str) -> str:
@@ -192,7 +329,30 @@ def plot_minnesota_precip_line(df: pd.DataFrame, outdir: str) -> str:
     # 5. Place the legend outside the plot box on the upper right: bbox_to_anchor=(1.05, 1), loc="upper left", title="Site".
     # 6. Save the figure as "minnesota_precip_line.png" in outdir (using 300 dpi and tight layout) and return the saved file path.
 
-    raise NotImplementedError("plot_minnesota_precip_line is not implemented yet.")
+    # 1. Build a datetime column from year and month (day = 1).
+    df = df.copy()
+    df["date"] = pd.to_datetime(
+        dict(year=df["year"], month=df["mo"], day=1)
+    )
+
+    # 2-3. Figure and line plot.
+    plt.figure(figsize=(10, 6))
+    ax = sns.lineplot(data=df, x="date", y="precip", hue="site")
+    ax.set_xlabel("Year")
+    ax.set_ylabel("Precipitation (inches)")
+
+    # 4. Title.
+    plt.title("Monthly precipitation by Minnesota site (1927–1936)")
+
+    # 5. Legend outside the plot box.
+    ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left", title="Site")
+
+    # 6. Save and return.
+    out_path = os.path.join(outdir, "minnesota_precip_line.png")
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=300)
+    plt.close()
+    return out_path
 
 
 def main() -> List[str]:
