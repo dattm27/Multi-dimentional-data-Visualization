@@ -25,25 +25,55 @@ data_visualization_assignment2/
 
 **Tóm tắt thời tiết của thử nghiệm lúa mạch Minnesota (agridat)** – *minnesota_weather.csv* lấy từ bộ dữ liệu `minnesota.barley.weather` trong gói `agridat`. Bộ dữ liệu này chứa **tóm tắt thời tiết hàng tháng từ năm 1927–1936 cho sáu địa điểm ở Minnesota**, nơi các thử nghiệm năng suất lúa mạch được tiến hành【635360545156382†L22-L59】. Các biến bao gồm tên địa điểm, năm, tháng, số ngày độ làm mát (cdd), số ngày độ sưởi ấm (hdd), lượng mưa (inch) và nhiệt độ tối thiểu/tối đa trung bình hàng ngày (°F)【635360545156382†L22-L59】. Dữ liệu được trích xuất từ hồ sơ của Trung tâm Dữ liệu Khí hậu Quốc gia Mỹ【635360545156382†L63-L86】. Bộ dữ liệu này được chọn nhằm đối chiếu góc nhìn toàn cầu với khí hậu khu vực địa phương trong vòng một thập kỷ và khám phá sự biến động của lượng mưa giữa các địa điểm gần nhau.
 
+## 🧹 Cấu trúc tiền xử lý dữ liệu
+
+Trước khi vẽ, mỗi bộ dữ liệu được làm sạch và tái cấu trúc riêng để đưa về đúng dạng mà từng loại biểu đồ yêu cầu. Toàn bộ logic này nằm trong `src/create_visualizations.py`.
+
+**Bước chung (load dữ liệu trong `main()`):** ba file CSV được đọc bằng `pandas.read_csv`. Riêng `global_temp.csv` có một dòng tiêu đề mô tả (`Land-Ocean: Global Means`) nên được đọc với `skiprows=1`; các ô khuyết được mã hóa bằng `***` được thay bằng `pd.NA` và mọi cột tháng được ép kiểu số bằng `pd.to_numeric(errors="coerce")` (giá trị không hợp lệ trở thành `NaN`).
+
+**1. Thời tiết hàng ngày → Heatmap (biểu đồ 1):** từ dữ liệu hàng ngày, ta `groupby(["city", "month"])` rồi lấy trung bình `avg_temp` để tổng hợp lên mức tháng, sau đó `pivot` thành ma trận `city × month` và sắp lại thứ tự cột theo lịch (tháng 1 → 12). Đây là phép biến đổi *aggregate → pivot* điển hình để biến dữ liệu dạng dài (long) thành ma trận hai chiều phân loại.
+
+**2. Thời tiết hàng ngày → Scatter (biểu đồ 2):** cột `precip` chứa giá trị ký tự (ví dụ mã `T` cho lượng mưa vết) nên được ép về số bằng `pd.to_numeric(errors="coerce")`, rồi các giá trị khuyết được điền `0.0` (coi lượng mưa vết ≈ 0). Không tổng hợp — mỗi dòng (một ngày) là một điểm dữ liệu, cho phép ánh xạ đồng thời 4 chiều: độ ẩm (x), nhiệt độ (y), thành phố (màu), lượng mưa (kích thước).
+
+**3. Dị thường nhiệt độ toàn cầu → Heatmap (biểu đồ 3):** dữ liệu ở dạng ngang (mỗi năm một dòng, 12 cột tháng) được `melt` về dạng dọc (`Year`, `Month`, `Anomaly`), ánh xạ tên tháng (`Jan`–`Dec`) sang số thứ tự (1–12) để sắp đúng trình tự thời gian, rồi `pivot` trở lại ma trận `Year × MonthNum` và sắp tăng dần theo năm. Đây là chu trình *wide → long → wide* nhằm chuẩn hóa và kiểm soát thứ tự trục.
+
+**4. Thời tiết Minnesota → Line chart (biểu đồ 4):** hai cột `year` và `mo` được hợp nhất thành một cột `datetime` (`date`, ngày = 1) để tạo trục thời gian liên tục, sau đó vẽ `precip` theo thời gian với mỗi địa điểm (`site`) là một đường. Các tháng thiếu dữ liệu được giữ nguyên dạng `NaN` để đường biểu diễn xuất hiện khoảng trống thay vì nối sai.
+
 ## 🛠️ Trực quan hóa dữ liệu
 
 Script `create_visualizations.py` tải các file CSV này bằng thư viện `pandas` và sau đó xây dựng các biểu đồ trực quan hóa sau:
 
 ### 1. 🌡️ Nhiệt độ trung bình hàng tháng theo thành phố (Bản đồ nhiệt - Heatmap)
 
+![Bản đồ nhiệt nhiệt độ trung bình hàng tháng theo thành phố](output/weather_heatmap.png)
+
 Bản đồ nhiệt này tổng hợp dữ liệu thời tiết hàng ngày thành nhiệt độ trung bình hàng tháng cho từng thành phố. Việc nhóm theo tháng và thành phố, sau đó xoay bảng dữ liệu (pivot table) sẽ tạo ra một ma trận nhiệt độ trung bình. Bảng màu phân kỳ `coolwarm` làm nổi bật các giá trị cao bằng màu đỏ và giá trị thấp bằng màu xanh lam. Việc ghi chú giá trị số cụ thể lên từng ô giúp thể hiện rõ ràng sự khác biệt về số liệu. Thanh thang đo màu được dán nhãn *“Average temperature”* (Nhiệt độ trung bình) để phản ánh các giá trị nhiệt độ theo độ Fahrenheit (°F) cơ sở【209500219273106†L108-L135】, và các tháng được sắp xếp từ 1 đến 12. Bản đồ nhiệt rất hiệu quả trong việc thể hiện các quy luật trên hai chiều phân loại; ở đây chúng cho thấy Bắc Kinh và Chicago có sự dao động theo mùa rất lớn (nhiệt độ mùa đông gần mức đóng băng và đỉnh điểm mùa hè gần 80 °F), Auckland có khí hậu ôn đới hải dương ôn hòa với nhiệt độ dao động trong khoảng 50–70 °F quanh năm, San Diego duy trì khí hậu ôn hòa ổn định, và Mumbai luôn ở mức trên 70 °F trong suốt cả năm. Một phần chú thích chi tiết được thêm vào bên dưới biểu đồ trong báo cáo cuối cùng.
+
+> 📌 **Nhận xét khoa học:** Biên độ dao động nhiệt độ theo mùa tỉ lệ nghịch với mức độ chịu ảnh hưởng của đại dương và vị trí vĩ độ. Các thành phố lục địa/vĩ độ cao (Bắc Kinh, Chicago) có biên độ năm rất lớn (~40–50 °F giữa tháng lạnh nhất và nóng nhất), trong khi các thành phố ven biển/nhiệt đới (Mumbai, San Diego, Auckland) gần như đẳng nhiệt quanh năm. Điều này phản ánh hiệu ứng điều hòa nhiệt (thermal inertia) của khối nước biển — minh chứng định lượng cho khái niệm "tính lục địa" (continentality) trong khí hậu học.
 
 ### 2. 🌬️💧 Nhiệt độ hàng ngày so với Độ ẩm tích hợp Lượng mưa (Biểu đồ phân tán - Scatter Plot)
 
+![Biểu đồ phân tán nhiệt độ và độ ẩm với kích thước theo lượng mưa](output/weather_scatter.png)
+
 Để khám phá mối quan hệ giữa nhiều biến số trong dữ liệu thời tiết hàng ngày, một biểu đồ phân tán đã được sử dụng. Mỗi điểm đại diện cho một ngày; trục hoành (*x*-axis) hiển thị độ ẩm tương đối trung bình, trục tung (*y*-axis) hiển thị nhiệt độ trung bình (vẫn tính bằng °F), màu sắc của điểm biểu thị thành phố và kích thước điểm biểu thị lượng mưa (lượng mưa vết đã được quy về 0). Biểu đồ phân tán cho phép chúng ta quan sát xem những ngày ấm hơn có xu hướng ẩm ướt hơn hay không, và liệu các sự kiện mưa lớn có trùng khớp với những sự kết hợp nhiệt độ - độ ẩm cụ thể nào không. Biểu đồ chỉ ra rằng Mumbai và Auckland nhìn chung có độ ẩm và lượng mưa cao hơn, trong khi Bắc Kinh và Chicago có độ ẩm thấp hơn vào các tháng lạnh và lượng mưa ít. Các ngày có mưa xuất hiện dưới dạng các điểm lớn hơn tập trung ở các giá trị độ ẩm vừa phải. Các phần chú giải (legend) cho màu sắc và kích thước được đặt bên ngoài vùng vẽ biểu đồ để tránh đè lên dữ liệu.
+
+> 📌 **Nhận xét khoa học:** Tồn tại tương quan dương rõ rệt giữa độ ẩm tương đối và lượng mưa: hầu như không có điểm mưa lớn nào nằm ở vùng độ ẩm thấp, còn các điểm có kích thước lớn (mưa nhiều) đều dồn về phía độ ẩm cao. Đây là biểu hiện trực quan của điều kiện vật lý để hình thành mưa — không khí phải đạt gần trạng thái bão hòa hơi nước (độ ẩm tương đối cao) thì ngưng tụ và giáng thủy mới xảy ra. Ngược lại, độ ẩm cao là điều kiện *cần nhưng chưa đủ*: vẫn có nhiều ngày độ ẩm cao mà không mưa, cho thấy giáng thủy còn phụ thuộc các yếu tố khác (đối lưu, front khí, địa hình).
 
 ### 3. 🔥🧊 Bản đồ nhiệt dị thường nhiệt độ toàn cầu (Global temperature anomalies heatmap)
 
+![Bản đồ nhiệt dị thường nhiệt độ toàn cầu theo năm và tháng](output/global_temp_heatmap.png)
+
 Đối với bộ dữ liệu GISTEMP, trước tiên script sẽ bỏ qua dòng tiêu đề mô tả và chuyển đổi các mục nhập `***` thành các giá trị khuyết (missing values). Các cột dị thường hàng tháng được chuyển đổi từ dạng ngang (wide) sang dạng dọc (long) và sau đó được xoay trở lại thành ma trận Năm × Tháng. Bản đồ nhiệt với bảng màu `coolwarm` hiển thị các mức dị thường từ −1,5 °C đến +1,5 °C so với mốc cơ sở 1951–1980【57940960815465†L124-L139】. Sắc xanh biểu thị nhiệt độ mát hơn mốc cơ sở, trong khi sắc đỏ biểu thị điều kiện ấm hơn. Trực quan hóa này thể hiện rõ nét sự ấm lên dần dần của hành tinh: những thập kỷ đầu tiên (thập niên 1880 – 1930) chủ yếu là màu xanh lam, các thập kỷ giữa thế kỷ chuyển dần sang các màu trung tính, và những thập kỷ gần đây nhất (từ thập niên 1980 trở đi) bị áp đảo hoàn toàn bởi màu đỏ. Sự ấm lên mạnh mẽ nhất xuất hiện trong thập kỷ qua (thập niên 2010 – 2020), trong đó năm 2016 và 2020 nổi bật lên là những năm đặc biệt nóng. Trục hoành sử dụng các chữ viết tắt tên tháng để dễ nhìn và trục tung liệt kê từng năm từ năm 1880 trở đi. Một ma trận dày đặc như vậy tốt nhất nên được diễn giải bằng hình ảnh trực quan thay vì các bảng văn bản; các quy luật trên cả quy mô mùa và quy mô nhiều thập kỷ sẽ hiện ra ngay lập tức chỉ trong nháy mắt.
+
+> 📌 **Nhận xét khoa học:** Tín hiệu ấm lên toàn cầu là một xu thế đơn điệu theo trục dọc (thời gian) và gần như **đồng nhất giữa 12 tháng** trên trục ngang. Việc màu đỏ xuất hiện đồng loạt ở mọi cột tháng trong các thập kỷ gần đây — chứ không chỉ ở mùa hè — cho thấy hiện tượng nóng lên mang tính hệ thống trên toàn năm, đặc trưng của cưỡng bức bức xạ (radiative forcing) do khí nhà kính, khác hẳn với dao động nội mùa. Tốc độ chuyển màu tăng nhanh sau thập niên 1970 còn gợi ý xu thế ấm lên đang **tăng tốc** (gia tốc dương) chứ không tuyến tính đều.
 
 ### 4. 🌧️ Lượng mưa hàng tháng theo địa điểm ở Minnesota (Biểu đồ đường - Line Chart)
 
+![Biểu đồ đường lượng mưa hàng tháng theo địa điểm ở Minnesota](output/minnesota_precip_line.png)
+
 Dữ liệu lúa mạch Minnesota được sử dụng để khảo sát lượng mưa thay đổi như thế nào giữa các địa điểm trong khoảng thời gian mười năm. Biểu đồ đường được chọn vì nó truyền tải các xu hướng thời gian một cách hiệu quả. Script tạo ra một cột ngày tháng từ năm và tháng, sau đó vẽ lượng mưa (tính bằng inch) theo trục thời gian này, với các đường riêng biệt cho từng địa điểm. Phần chú giải giúp xác định rõ các địa điểm và bố cục được căn chỉnh chặt chẽ giúp biểu đồ gọn gàng. Biểu đồ cho thấy lượng mưa đạt đỉnh vào các tháng mùa hè (tháng 6 – tháng 8) tại tất cả các địa điểm, phản ánh khí hậu lục địa của Minnesota, và Waseca cùng St. Paul có xu hướng nhận được nhiều lượng mưa hơn so với Morris hoặc Crookston. Việc thiếu dữ liệu của Duluth vào tháng 12 năm 1931 được thể hiện rõ ràng bằng một khoảng trống ngắt quãng trên đường biểu diễn【635360545156382†L76-L81】.
+
+> 📌 **Nhận xét khoa học:** Lượng mưa ở cả sáu địa điểm thể hiện một **chu kỳ mùa rõ rệt và đồng pha** — đỉnh vào các tháng hè (tháng 6–8) và đáy vào mùa đông — bất chấp khoảng cách địa lý giữa các trạm. Sự đồng pha này là dấu hiệu của khí hậu lục địa ẩm (humid continental) của Minnesota, nơi giáng thủy mùa hè chủ yếu đến từ đối lưu nhiệt và bão dông, còn mùa đông lạnh khô hạn chế lượng ẩm. Sự chênh lệch biên độ giữa các trạm (Waseca, St. Paul nhiều mưa hơn Morris, Crookston) phản ánh gradient ẩm giảm dần theo hướng tây-bắc — xa nguồn ẩm hơn và khuất gió hơn.
 
 ## 💡 Lựa chọn, thách thức và hướng phát triển
 
